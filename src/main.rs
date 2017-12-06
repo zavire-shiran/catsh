@@ -1,3 +1,4 @@
+use std::env;
 use std::io;
 use std::io::{Write};
 
@@ -18,6 +19,10 @@ fn main() {
         let split_line = split(input);
 
         println!("{:?}", split_line);
+
+        if split_line.len() > 0 {
+            execute_command(split_line);
+        }
     }
 }
 
@@ -29,4 +34,19 @@ fn split(line: String) -> Vec<String> {
     }
 
     return ret;
+}
+
+fn execute_command(command: Vec<String>) {
+    match &command[0][..] {
+        "cd" => {
+            if command.len() > 1 {
+                env::set_current_dir(&command[1]).expect("");
+            }
+        }
+        _ => { fork_exec(command) }
+    }
+}
+
+fn fork_exec(command: Vec<String>) {
+
 }
