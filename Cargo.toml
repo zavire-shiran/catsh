@@ -1,0 +1,7 @@
+[package]
+
+name = "catsh"
+version = "0.0.1"
+authors = [ "zavire shiran <zavire.shiran@gmail.com>" ]
+
+[dependencies]
