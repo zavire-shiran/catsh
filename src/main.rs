@@ -15,6 +15,18 @@ fn main() {
             _ => {}
         }
 
-        stdout.write(input.as_bytes()).is_ok();
+        let split_line = split(input);
+
+        println!("{:?}", split_line);
     }
+}
+
+fn split(line: String) -> Vec<String> {
+    let mut ret: Vec<String> = Vec::new();
+
+    for word in line.split_whitespace() {
+        ret.push(word.to_string());
+    }
+
+    return ret;
 }
