@@ -8,28 +8,31 @@ extern crate nix;
 extern crate libc;
 
 fn main() {
-    let mut stdout = io::stdout();
-    let stdin = io::stdin();
-
     loop {
-        stdout.write(b"$ ").is_ok();
-        stdout.flush().is_ok();
-
-        let mut input = String::new();
-        match stdin.read_line(&mut input) {
-            Ok(0) => break,
-            _ => {}
-        }
-
-        let split_line = split(input);
-
-        //println!("{:?}", split_line);
-
-        if split_line.len() > 0 {
-            execute_command(split_line);
+        match get_next_command() {
+            Some(command) => execute_command(command),
+            None => break
         }
     }
 }
+
+fn get_next_command() -> Option<Vec<String>> {
+    let mut stdout = io::stdout();
+    let stdin = io::stdin();
+
+    stdout.write(b"$ ").is_ok();
+    stdout.flush().is_ok();
+
+    let mut input = String::new();
+    return match stdin.read_line(&mut input) {
+        Ok(0) => None, // this always mean EOF, i think
+        _ => {
+            let split_line = split(input);
+            Some(split_line)
+        }
+    }
+}
+
 
 fn split(line: String) -> Vec<String> {
     let mut ret: Vec<String> = Vec::new();
@@ -42,6 +45,9 @@ fn split(line: String) -> Vec<String> {
 }
 
 fn execute_command(command: Vec<String>) {
+    if command.len() == 0 {
+        return;
+    }
     match &command[0][..] {
         "cd" => {
             if command.len() > 1 {
