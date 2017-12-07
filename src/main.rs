@@ -5,6 +5,7 @@ use std::path::Path;
 use std::ffi::CString;
 
 extern crate nix;
+extern crate libc;
 
 fn main() {
     let mut stdout = io::stdout();
@@ -45,6 +46,12 @@ fn execute_command(command: Vec<String>) {
         "cd" => {
             if command.len() > 1 {
                 env::set_current_dir(&command[1]).expect("");
+                println!("{:?}", env::current_dir());
+            } else {
+                match env::var("HOME") {
+                    Ok(home_path) => env::set_current_dir(home_path).expect(""),
+                    Err(_) => println!("Don't know where home is :/")
+                }
             }
         }
         _ => { run_command_line(command) }
@@ -55,9 +62,17 @@ fn run_command_line(command: Vec<String>) {
     let command_name = &command[0];
     let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
-    match get_path_for_command(command_name) {
-        Some(command_path) => { fork_exec(&command_path, &command_args); }
-        None => { println!("Could not find command {}", command_name); }
+    if command_name.starts_with('.') {
+        if Path::new(&command_name).exists() {
+            fork_exec(&CString::new(command_name.as_bytes()).unwrap(), &command_args);
+        } else {
+            println!("Could not file command {}", command_name);
+        }
+    } else {
+        match get_path_for_command(command_name) {
+            Some(command_path) => { fork_exec(&command_path, &command_args); }
+            None => { println!("Could not find command {}", command_name); }
+        }
     }
 }
 
