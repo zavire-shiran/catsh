@@ -1,6 +1,10 @@
 use std::env;
 use std::io;
 use std::io::{Write};
+use std::path::Path;
+use std::ffi::CString;
+
+extern crate nix;
 
 fn main() {
     let mut stdout = io::stdout();
@@ -18,7 +22,7 @@ fn main() {
 
         let split_line = split(input);
 
-        println!("{:?}", split_line);
+        //println!("{:?}", split_line);
 
         if split_line.len() > 0 {
             execute_command(split_line);
@@ -43,10 +47,61 @@ fn execute_command(command: Vec<String>) {
                 env::set_current_dir(&command[1]).expect("");
             }
         }
-        _ => { fork_exec(command) }
+        _ => { run_command_line(command) }
     }
 }
 
-fn fork_exec(command: Vec<String>) {
+fn run_command_line(command: Vec<String>) {
+    let command_name = &command[0];
+    let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
+    println!("command name: {}", command_name);
+
+    match get_path_for_command(command_name) {
+        Some(command_path) => { fork_exec(&command_path, &command_args); }
+        None => { println!("Could not find command {}", command_name); }
+    }
+}
+
+fn get_path_for_command(command_name: &String) -> Option<CString> {
+    let path_list = get_path_list();
+
+    for path_str in path_list {
+        let path = Path::new(&path_str);
+        let command_path = path.join(command_name);
+        if command_path.exists() {
+            match command_path.to_str() {
+                Some(cp) => { return Some(CString::new(cp).unwrap()); }
+                None => ()
+            }
+        }
+    }
+    return None;
+}
+
+fn get_path_list() -> Vec<String> {
+    match std::env::var("PATH") {
+        Ok(path) => {
+            let p: Vec<String> = path.split(':').map(|x| x.to_string()).collect();
+            return p;
+        }
+        Err(_) => {
+            println!("Warning: could not retrive $PATH");
+            return vec!["/bin".into(), "/usr/bin".into()];
+        }
+    }
+}
+
+fn fork_exec(command_name: &CString, command_args: &[CString]) {
+    use nix::unistd::{fork, ForkResult};
+
+    match fork() {
+        Ok(ForkResult::Parent {child, ..}) => {
+            nix::sys::wait::waitpid(child, None).expect("waitpid failed");
+        }
+        Ok(ForkResult::Child) => {
+            nix::unistd::execv(command_name, command_args).expect("exec failed");
+        }
+        Err(_) => { println!("fork failed") }
+    }
 }
