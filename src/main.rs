@@ -55,8 +55,6 @@ fn run_command_line(command: Vec<String>) {
     let command_name = &command[0];
     let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
-    println!("command name: {}", command_name);
-
     match get_path_for_command(command_name) {
         Some(command_path) => { fork_exec(&command_path, &command_args); }
         None => { println!("Could not find command {}", command_name); }
