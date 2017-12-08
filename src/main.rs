@@ -8,33 +8,65 @@ extern crate nix;
 extern crate libc;
 
 fn main() {
+    let mut command_parser = CommandParser::new();
+
     loop {
-        match get_next_command() {
+        match command_parser.get_next_command() {
             Some(command) => execute_command(command),
             None => break
         }
     }
 }
 
-fn get_next_command() -> Option<Vec<String>> {
-    let mut stdout = io::stdout();
-    let stdin = io::stdin();
+struct CommandParser {
+    input_buffer: String,
+    command_buffer: Vec<Vec<String>>
+}
 
-    stdout.write(b"$ ").is_ok();
-    stdout.flush().is_ok();
+#[derive(PartialEq)]
+enum ParserStatus {
+    EOF,
+    Ok
+}
 
-    let mut input = String::new();
-    return match stdin.read_line(&mut input) {
-        Ok(0) => None, // this always mean EOF, i think
-        _ => {
-            let split_line = split(input);
-            Some(split_line)
+impl CommandParser {
+    fn new() -> CommandParser {
+        return CommandParser{
+            input_buffer: std::string::String::new(),
+            command_buffer: Vec::new() }
+    }
+
+    fn get_next_command(&mut self) -> Option<Vec<String>> {
+        while self.command_buffer.len() == 0 {
+            if self.parse_input() == ParserStatus::EOF {
+                return None
+            }
+        }
+
+        return Some(self.command_buffer.remove(0));
+    }
+
+    fn parse_input(&mut self) -> ParserStatus {
+        let mut stdout = io::stdout();
+        let stdin = io::stdin();
+
+        stdout.write(b"$ ").is_ok();
+        stdout.flush().is_ok();
+
+        let mut input = String::new();
+        return match stdin.read_line(&mut input) {
+            Ok(0) => ParserStatus::EOF, // this always mean EOF, i think
+            _ => {
+                let command = parse_command(input);
+                self.command_buffer.push(command);
+                ParserStatus::Ok
+            }
         }
     }
 }
 
 
-fn split(line: String) -> Vec<String> {
+fn parse_command(line: String) -> Vec<String> {
     let mut ret: Vec<String> = Vec::new();
 
     for word in line.split_whitespace() {
