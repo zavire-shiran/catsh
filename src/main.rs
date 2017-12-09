@@ -81,7 +81,8 @@ impl CommandParser {
 #[derive(Debug)]
 enum CommandLineTokenType {
     Argument,
-    EOL
+    EOL,
+    Semicolon
 }
 
 #[derive(Debug)]
@@ -104,6 +105,13 @@ impl CommandLineToken {
             lexeme: String::from("\n")
         }
     }
+
+    fn semicolon() -> CommandLineToken {
+        return CommandLineToken {
+            token_class: CommandLineTokenType::Semicolon,
+            lexeme: String::from(";")
+        }
+    }
 }
 
 fn tokenize_command(line: String) -> Vec<CommandLineToken> {
@@ -119,6 +127,12 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
             if c == '\n' {
                 tokens.push(CommandLineToken::eol())
             }
+        } else if c == ';' {
+            if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                cur_arg_buf = String::new();
+            }
+            tokens.push(CommandLineToken::semicolon());
         } else {
             cur_arg_buf.push(c);
         }
