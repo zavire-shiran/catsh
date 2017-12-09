@@ -71,33 +71,72 @@ impl CommandParser {
             ret.push(word.to_string());
         }
 
+        println!("{:?}", tokenize_command(line));
+
         return ret;
     }
 
 }
 
+#[derive(Debug)]
 enum CommandLineTokenType {
     Argument,
     Space,
     EOL
 }
 
+#[derive(Debug)]
 struct CommandLineToken {
     token_class: CommandLineTokenType,
     lexeme: String
 }
 
-fn tokenize_command(line: String) -> Vec<CommandLineToken> {
-    use CommandLineTokenType as tt;
-
-    for c in line.chars() {
-        if c == '\n' {
-        } else if c.iswhitespace() {
-        } else {
+impl CommandLineToken {
+    fn argument(lexeme: String) -> CommandLineToken {
+        return CommandLineToken {
+            token_class: CommandLineTokenType::Argument,
+            lexeme: lexeme
         }
     }
 
-    return Vec::new();
+    fn eol() -> CommandLineToken {
+        return CommandLineToken {
+            token_class: CommandLineTokenType::EOL,
+            lexeme: String::from("\n")
+        }
+    }
+
+    fn space() -> CommandLineToken {
+        return CommandLineToken {
+            token_class: CommandLineTokenType::Space,
+            lexeme: String::from(" ")
+        }
+    }
+}
+
+fn tokenize_command(line: String) -> Vec<CommandLineToken> {
+    let mut cur_arg_buf = String::new();
+    let mut tokens = Vec::new();
+
+    for c in line.chars() {
+        if c == '\n' {
+            if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                cur_arg_buf = String::new();
+            }
+            tokens.push(CommandLineToken::eol())
+        } else if c.is_whitespace() {
+            if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                cur_arg_buf = String::new();
+                tokens.push(CommandLineToken::space());
+            }
+        } else {
+            cur_arg_buf.push(c);
+        }
+    }
+
+    return tokens;
 }
 
 fn execute_command(command: Vec<String>) {
