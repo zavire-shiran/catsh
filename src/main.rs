@@ -57,23 +57,47 @@ impl CommandParser {
         return match stdin.read_line(&mut input) {
             Ok(0) => ParserStatus::EOF, // this always mean EOF, i think
             _ => {
-                let command = parse_command(input);
+                let command = self.parse_command(input);
                 self.command_buffer.push(command);
                 ParserStatus::Ok
             }
         }
     }
-}
 
+    fn parse_command(&mut self, line: String) -> Vec<String> {
+        let mut ret: Vec<String> = Vec::new();
 
-fn parse_command(line: String) -> Vec<String> {
-    let mut ret: Vec<String> = Vec::new();
+        for word in line.split_whitespace() {
+            ret.push(word.to_string());
+        }
 
-    for word in line.split_whitespace() {
-        ret.push(word.to_string());
+        return ret;
     }
 
-    return ret;
+}
+
+enum CommandLineTokenType {
+    Argument,
+    Space,
+    EOL
+}
+
+struct CommandLineToken {
+    token_class: CommandLineTokenType,
+    lexeme: String
+}
+
+fn tokenize_command(line: String) -> Vec<CommandLineToken> {
+    use CommandLineTokenType as tt;
+
+    for c in line.chars() {
+        if c == '\n' {
+        } else if c.iswhitespace() {
+        } else {
+        }
+    }
+
+    return Vec::new();
 }
 
 fn execute_command(command: Vec<String>) {
