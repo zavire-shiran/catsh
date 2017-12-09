@@ -81,7 +81,6 @@ impl CommandParser {
 #[derive(Debug)]
 enum CommandLineTokenType {
     Argument,
-    Space,
     EOL
 }
 
@@ -105,13 +104,6 @@ impl CommandLineToken {
             lexeme: String::from("\n")
         }
     }
-
-    fn space() -> CommandLineToken {
-        return CommandLineToken {
-            token_class: CommandLineTokenType::Space,
-            lexeme: String::from(" ")
-        }
-    }
 }
 
 fn tokenize_command(line: String) -> Vec<CommandLineToken> {
@@ -119,17 +111,13 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
     let mut tokens = Vec::new();
 
     for c in line.chars() {
-        if c == '\n' {
+        if c.is_whitespace() {
             if cur_arg_buf.len() > 0 {
                 tokens.push(CommandLineToken::argument(cur_arg_buf));
                 cur_arg_buf = String::new();
             }
-            tokens.push(CommandLineToken::eol())
-        } else if c.is_whitespace() {
-            if cur_arg_buf.len() > 0 {
-                tokens.push(CommandLineToken::argument(cur_arg_buf));
-                cur_arg_buf = String::new();
-                tokens.push(CommandLineToken::space());
+            if c == '\n' {
+                tokens.push(CommandLineToken::eol())
             }
         } else {
             cur_arg_buf.push(c);
