@@ -11,16 +11,19 @@ fn main() {
     let mut command_parser = CommandParser::new();
 
     loop {
-        match command_parser.get_next_command() {
-            Some(command) => execute_command(command),
+        match command_parser.get_next_command_list() {
+            Some(command_list) => execute_command_list(command_list),
             None => break
         }
     }
 }
 
+type Command = Vec<String>;
+type CommandList = Vec<Command>;
+
 struct CommandParser {
     input_buffer: String,
-    command_buffer: Vec<Vec<String>>
+    command_list_buffer: Vec<CommandList>
 }
 
 #[derive(PartialEq)]
@@ -33,17 +36,17 @@ impl CommandParser {
     fn new() -> CommandParser {
         return CommandParser{
             input_buffer: std::string::String::new(),
-            command_buffer: Vec::new() }
+            command_list_buffer: Vec::new() }
     }
 
-    fn get_next_command(&mut self) -> Option<Vec<String>> {
-        while self.command_buffer.len() == 0 {
+    fn get_next_command_list(&mut self) -> Option<CommandList> {
+        while self.command_list_buffer.len() == 0 {
             if self.parse_input() == ParserStatus::EOF {
                 return None
             }
         }
 
-        return Some(self.command_buffer.remove(0));
+        return Some(self.command_list_buffer.remove(0));
     }
 
     fn parse_input(&mut self) -> ParserStatus {
@@ -57,28 +60,36 @@ impl CommandParser {
         return match stdin.read_line(&mut input) {
             Ok(0) => ParserStatus::EOF, // this always mean EOF, i think
             _ => {
-                let command = self.parse_command(input);
-                self.command_buffer.push(command);
+                let command_list = self.parse_command_list(input);
+                self.command_list_buffer.push(command_list);
                 ParserStatus::Ok
             }
         }
     }
 
-    fn parse_command(&mut self, line: String) -> Vec<String> {
-        let mut ret: Vec<String> = Vec::new();
+    fn parse_command_list(&mut self, line: String) -> CommandList {
+        let mut command_list: CommandList = Vec::new();
+        let mut command: Command = Vec::new();
 
-        for word in line.split_whitespace() {
-            ret.push(word.to_string());
+        let tokens = tokenize_command(line);
+        for token in tokens {
+            if token.class == CommandLineTokenType::Argument {
+                command.push(token.lexeme);
+            } else if token.class == CommandLineTokenType::Semicolon {
+                command_list.push(command);
+                command = Vec::new()
+            } else if token.class == CommandLineTokenType::EOL {
+                command_list.push(command);
+                return command_list;
+            }
         }
 
-        println!("{:?}", tokenize_command(line));
-
-        return ret;
+        return command_list;
     }
 
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum CommandLineTokenType {
     Argument,
     EOL,
@@ -87,28 +98,28 @@ enum CommandLineTokenType {
 
 #[derive(Debug)]
 struct CommandLineToken {
-    token_class: CommandLineTokenType,
+    class: CommandLineTokenType,
     lexeme: String
 }
 
 impl CommandLineToken {
     fn argument(lexeme: String) -> CommandLineToken {
         return CommandLineToken {
-            token_class: CommandLineTokenType::Argument,
+            class: CommandLineTokenType::Argument,
             lexeme: lexeme
         }
     }
 
     fn eol() -> CommandLineToken {
         return CommandLineToken {
-            token_class: CommandLineTokenType::EOL,
+            class: CommandLineTokenType::EOL,
             lexeme: String::from("\n")
         }
     }
 
     fn semicolon() -> CommandLineToken {
         return CommandLineToken {
-            token_class: CommandLineTokenType::Semicolon,
+            class: CommandLineTokenType::Semicolon,
             lexeme: String::from(";")
         }
     }
@@ -139,6 +150,12 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
     }
 
     return tokens;
+}
+
+fn execute_command_list(command_list: CommandList) {
+    for command in command_list {
+        execute_command(command);
+    }
 }
 
 fn execute_command(command: Vec<String>) {
