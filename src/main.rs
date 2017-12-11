@@ -72,6 +72,7 @@ impl CommandParser {
         let mut command: Command = Vec::new();
 
         let tokens = tokenize_command(line);
+        println!("{:?}", tokens);
         for token in tokens {
             if token.class == CommandLineTokenType::Argument {
                 command.push(token.lexeme);
@@ -93,6 +94,10 @@ impl CommandParser {
 enum CommandLineTokenType {
     Argument,
     EOL,
+    Ampersand,
+    Pipe,
+    AndOp,
+    OrOp,
     Semicolon
 }
 
@@ -123,6 +128,34 @@ impl CommandLineToken {
             lexeme: String::from(";")
         }
     }
+
+    fn and_op() -> CommandLineToken {
+        return CommandLineToken {
+            class: CommandLineTokenType::AndOp,
+            lexeme: String::from("&&")
+        }
+    }
+
+    fn or_op() -> CommandLineToken {
+        return CommandLineToken {
+            class: CommandLineTokenType::OrOp,
+            lexeme: String::from("||")
+        }
+    }
+
+    fn ampersand() -> CommandLineToken {
+        return CommandLineToken {
+            class: CommandLineTokenType::Ampersand,
+            lexeme: String::from("&")
+        }
+    }
+
+    fn pipe() -> CommandLineToken {
+        return CommandLineToken {
+            class: CommandLineTokenType::Pipe,
+            lexeme: String::from("|")
+        }
+    }
 }
 
 fn tokenize_command(line: String) -> Vec<CommandLineToken> {
@@ -130,6 +163,27 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
     let mut tokens = Vec::new();
 
     for c in line.chars() {
+        if cur_arg_buf == "&" {
+            if c == '&' {
+                tokens.push(CommandLineToken::and_op());
+                cur_arg_buf = String::new();
+                continue;
+            } else {
+                tokens.push(CommandLineToken::ampersand());
+                cur_arg_buf = String::new();
+            }
+        } else if cur_arg_buf == "|" {
+            if c == '|' {
+                tokens.push(CommandLineToken::or_op());
+                cur_arg_buf = String::new();
+                continue;
+            } else {
+                tokens.push(CommandLineToken::pipe());
+                cur_arg_buf = String::new();
+            }
+        }
+
+
         if c.is_whitespace() {
             if cur_arg_buf.len() > 0 {
                 tokens.push(CommandLineToken::argument(cur_arg_buf));
@@ -144,7 +198,13 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
                 cur_arg_buf = String::new();
             }
             tokens.push(CommandLineToken::semicolon());
-        } else {
+        } else if c == '&' || c == '|' {
+            if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                cur_arg_buf = String::new();
+            }
+            cur_arg_buf.push(c);
+        } else  {
             cur_arg_buf.push(c);
         }
     }
