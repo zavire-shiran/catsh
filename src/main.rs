@@ -52,7 +52,7 @@ impl Command {
         }
     }
 
-    fn push(&mut self, arg: String) {
+    fn push_argument(&mut self, arg: String) {
         self.arguments.push(arg);
     }
 
@@ -117,7 +117,7 @@ impl CommandParser {
         println!("{:?}", tokens);
         for token in tokens {
             if token.class == CommandLineTokenType::Argument {
-                command.push(token.lexeme);
+                command.push_argument(token.lexeme);
             } else if command.len() == 0 {
                 //this is a syntax error, but i don't want to deal with the Result<> right now
             } else if token.class == CommandLineTokenType::Semicolon {
