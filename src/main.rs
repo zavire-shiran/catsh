@@ -18,7 +18,49 @@ fn main() {
     }
 }
 
-type Command = Vec<String>;
+#[derive(PartialEq)]
+enum RunConditions {
+    Always,
+    IfTrue,
+    IfFalse
+}
+
+struct Command {
+    arguments: Vec<String>,
+    run_conditions: RunConditions
+}
+
+impl Command {
+    fn always() -> Command {
+        return Command {
+            arguments: Vec::new(),
+            run_conditions: RunConditions::Always
+        }
+    }
+
+    fn if_true() -> Command {
+        return Command {
+            arguments: Vec::new(),
+            run_conditions: RunConditions::IfTrue
+        }
+    }
+
+    fn if_false() -> Command {
+        return Command {
+            arguments: Vec::new(),
+            run_conditions: RunConditions::IfFalse
+        }
+    }
+
+    fn push(&mut self, arg: String) {
+        self.arguments.push(arg);
+    }
+
+    fn len(&self) -> usize {
+        return self.arguments.len();
+    }
+}
+
 type CommandList = Vec<Command>;
 
 struct CommandParser {
@@ -69,19 +111,27 @@ impl CommandParser {
 
     fn parse_command_list(&mut self, line: String) -> CommandList {
         let mut command_list: CommandList = Vec::new();
-        let mut command: Command = Vec::new();
+        let mut command: Command = Command::always();
 
         let tokens = tokenize_command(line);
         println!("{:?}", tokens);
         for token in tokens {
             if token.class == CommandLineTokenType::Argument {
                 command.push(token.lexeme);
+            } else if command.len() == 0 {
+                //this is a syntax error, but i don't want to deal with the Result<> right now
             } else if token.class == CommandLineTokenType::Semicolon {
                 command_list.push(command);
-                command = Vec::new()
+                command = Command::always();
             } else if token.class == CommandLineTokenType::EOL {
                 command_list.push(command);
                 return command_list;
+            } else if token.class == CommandLineTokenType::AndOp {
+                command_list.push(command);
+                command = Command::if_true();
+            } else if token.class == CommandLineTokenType::OrOp {
+                command_list.push(command);
+                command = Command::if_false();
             }
         }
 
@@ -214,7 +264,7 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
 
 fn execute_command_list(command_list: CommandList) {
     for command in command_list {
-        execute_command(command);
+        execute_command(command.arguments);
     }
 }
 
@@ -225,7 +275,7 @@ fn execute_command(command: Vec<String>) {
     match &command[0][..] {
         "cd" => {
             if command.len() > 1 {
-                env::set_current_dir(&command[1]).expect("");
+                env::set_current_dir(&command[1]).expect(""); // need to set command status on error here, so as not to panic
                 println!("{:?}", env::current_dir());
             } else {
                 match env::var("HOME") {
@@ -242,7 +292,7 @@ fn run_command_line(command: Vec<String>) {
     let command_name = &command[0];
     let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
-    if command_name.starts_with('.') {
+    if command_name.contains('/') {
         if Path::new(&command_name).exists() {
             fork_exec(&CString::new(command_name.as_bytes()).unwrap(), &command_args);
         } else {
@@ -287,10 +337,16 @@ fn get_path_list() -> Vec<String> {
 
 fn fork_exec(command_name: &CString, command_args: &[CString]) {
     use nix::unistd::{fork, ForkResult};
+    use nix::sys::wait::WaitStatus;
 
     match fork() {
         Ok(ForkResult::Parent {child, ..}) => {
-            nix::sys::wait::waitpid(child, None).expect("waitpid failed");
+            match nix::sys::wait::waitpid(child, None).expect("waitpid failed") {
+                WaitStatus::Exited(_, status) => status,
+                WaitStatus::Signaled(_, signal, core_dump_p) => -1,
+                WaitStatus::Stopped(_, signal) => -2,
+                _ => -3
+            };
         }
         Ok(ForkResult::Child) => {
             nix::unistd::execv(command_name, command_args).expect("exec failed");
