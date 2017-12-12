@@ -264,44 +264,56 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
 
 fn execute_command_list(command_list: CommandList) {
     for command in command_list {
-        execute_command(command.arguments);
+        let status = execute_command(command.arguments);
+        println!("command status: {}", status);
     }
 }
 
-fn execute_command(command: Vec<String>) {
+fn execute_command(command: Vec<String>) -> i8 {
     if command.len() == 0 {
-        return;
+        return 0;
     }
     match &command[0][..] {
         "cd" => {
             if command.len() > 1 {
                 env::set_current_dir(&command[1]).expect(""); // need to set command status on error here, so as not to panic
                 println!("{:?}", env::current_dir());
+                return 0;
             } else {
                 match env::var("HOME") {
-                    Ok(home_path) => env::set_current_dir(home_path).expect(""),
-                    Err(_) => println!("Don't know where home is :/")
+                    Ok(home_path) => {
+                        env::set_current_dir(home_path).expect("");
+                        return 0;
+                    },
+                    Err(_) => {
+                        println!("Don't know where home is :/");
+                        return 1;
+                    }
                 }
             }
         }
-        _ => { run_command_line(command) }
+        _ => run_command_line(command)
     }
 }
 
-fn run_command_line(command: Vec<String>) {
+fn run_command_line(command: Vec<String>) -> i8 {
     let command_name = &command[0];
     let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
     if command_name.contains('/') {
         if Path::new(&command_name).exists() {
-            fork_exec(&CString::new(command_name.as_bytes()).unwrap(), &command_args);
+            return fork_exec(&CString::new(command_name.as_bytes()).unwrap(), &command_args);
         } else {
             println!("Could not file command {}", command_name);
+            return 1;
         }
     } else {
         match get_path_for_command(command_name) {
-            Some(command_path) => { fork_exec(&command_path, &command_args); }
-            None => { println!("Could not find command {}", command_name); }
+            Some(command_path) => { return fork_exec(&command_path, &command_args); }
+            None => {
+                println!("Could not find command {}", command_name);
+                return 1;
+            }
         }
     }
 }
@@ -335,13 +347,13 @@ fn get_path_list() -> Vec<String> {
     }
 }
 
-fn fork_exec(command_name: &CString, command_args: &[CString]) {
+fn fork_exec(command_name: &CString, command_args: &[CString]) -> i8 {
     use nix::unistd::{fork, ForkResult};
     use nix::sys::wait::WaitStatus;
 
     match fork() {
         Ok(ForkResult::Parent {child, ..}) => {
-            match nix::sys::wait::waitpid(child, None).expect("waitpid failed") {
+            return match nix::sys::wait::waitpid(child, None).expect("waitpid failed") {
                 WaitStatus::Exited(_, status) => status,
                 WaitStatus::Signaled(_, signal, core_dump_p) => -1,
                 WaitStatus::Stopped(_, signal) => -2,
@@ -350,7 +362,11 @@ fn fork_exec(command_name: &CString, command_args: &[CString]) {
         }
         Ok(ForkResult::Child) => {
             nix::unistd::execv(command_name, command_args).expect("exec failed");
+            return 0; // never reaches here, but compiler needs it
         }
-        Err(_) => { println!("fork failed") }
+        Err(_) => {
+            println!("fork failed");
+            return 1;
+        }
     }
 }
