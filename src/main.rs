@@ -18,13 +18,14 @@ fn main() {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Debug)]
 enum RunConditions {
     Always,
     IfTrue,
     IfFalse
 }
 
+#[derive(Debug)]
 struct Command {
     arguments: Vec<String>,
     run_conditions: RunConditions
@@ -114,7 +115,7 @@ impl CommandParser {
         let mut command: Command = Command::always();
 
         let tokens = tokenize_command(line);
-        println!("{:?}", tokens);
+        //println!("{:?}", tokens);
         for token in tokens {
             if token.class == CommandLineTokenType::Argument {
                 command.push_argument(token.lexeme);
@@ -263,9 +264,30 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
 }
 
 fn execute_command_list(command_list: CommandList) {
+    //println!("{:?}", command_list);
+    let mut status = 0;
     for command in command_list {
-        let status = execute_command(command.arguments);
-        println!("command status: {}", status);
+        //println!("{:?}", command);
+        match command.run_conditions {
+            RunConditions::Always => {
+                //println!("Always");
+                status = execute_command(command.arguments)
+            },
+            RunConditions::IfTrue => {
+                //println!("IfTrue");
+                if status == 0 {
+                    status = execute_command(command.arguments)
+                }
+            },
+            RunConditions::IfFalse => {
+                //println!("IfFalse");
+                if status != 0 {
+                    status = execute_command(command.arguments)
+                }
+            }
+        }
+
+        //println!("command status: {}", status);
     }
 }
 
@@ -277,7 +299,7 @@ fn execute_command(command: Vec<String>) -> i8 {
         "cd" => {
             if command.len() > 1 {
                 env::set_current_dir(&command[1]).expect(""); // need to set command status on error here, so as not to panic
-                println!("{:?}", env::current_dir());
+                //println!("{:?}", env::current_dir());
                 return 0;
             } else {
                 match env::var("HOME") {
