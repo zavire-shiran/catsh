@@ -291,7 +291,7 @@ fn execute_command_list(command_list: CommandList) {
     }
 }
 
-fn execute_command(command: Vec<String>) -> i8 {
+fn execute_command(mut command: Vec<String>) -> i8 {
     if command.len() == 0 {
         return 0;
     }
@@ -314,11 +314,15 @@ fn execute_command(command: Vec<String>) -> i8 {
                 }
             }
         }
-        _ => run_command_line(command)
+        "exec" => {
+            command.remove(0);
+            run_command_line(command, false)
+        }
+        _ => run_command_line(command, true)
     }
 }
 
-fn run_command_line(command: Vec<String>) -> i8 {
+fn run_command_line(command: Vec<String>, fork: bool) -> i8 {
     let command_name = &command[0];
     let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
@@ -331,7 +335,13 @@ fn run_command_line(command: Vec<String>) -> i8 {
         }
     } else {
         match get_path_for_command(command_name) {
-            Some(command_path) => { return fork_exec(&command_path, &command_args); }
+            Some(command_path) =>
+                if fork {
+                    return fork_exec(&command_path, &command_args);
+                } else {
+                    nix::unistd::execv(&command_path, &command_args).expect("exec failed");
+                    return 0;
+                }
             None => {
                 println!("Could not find command {}", command_name);
                 return 1;
