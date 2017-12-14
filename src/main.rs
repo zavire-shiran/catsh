@@ -8,6 +8,11 @@ extern crate nix;
 extern crate libc;
 
 fn main() {
+    let exit_code = real_main();
+    std::process::exit(exit_code);
+}
+
+fn real_main() -> i32 {
     let mut command_parser = CommandParser::new();
 
     loop {
@@ -16,6 +21,8 @@ fn main() {
             None => break
         }
     }
+
+    return 0;
 }
 
 #[derive(PartialEq,Debug)]
