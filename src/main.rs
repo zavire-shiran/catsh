@@ -115,7 +115,7 @@ impl CommandParser {
         let mut command: Command = Command::always();
 
         let tokens = tokenize_command(line);
-        //println!("{:?}", tokens);
+        println!("{:?}", tokens);
         for token in tokens {
             if token.class == CommandLineTokenType::Argument {
                 command.push_argument(token.lexeme);
@@ -149,7 +149,9 @@ enum CommandLineTokenType {
     Pipe,
     AndOp,
     OrOp,
-    Semicolon
+    Semicolon,
+    OpenParen,
+    CloseParen
 }
 
 #[derive(Debug)]
@@ -207,6 +209,20 @@ impl CommandLineToken {
             lexeme: String::from("|")
         }
     }
+
+    fn open_paren() -> CommandLineToken {
+        return CommandLineToken {
+            class: CommandLineTokenType::OpenParen,
+            lexeme: String::from("(")
+        }
+    }
+
+    fn close_paren() -> CommandLineToken {
+        return CommandLineToken {
+            class: CommandLineTokenType::CloseParen,
+            lexeme: String::from(")")
+        }
+    }
 }
 
 fn tokenize_command(line: String) -> Vec<CommandLineToken> {
@@ -255,7 +271,19 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
                 cur_arg_buf = String::new();
             }
             cur_arg_buf.push(c);
-        } else  {
+        } else if c == '(' {
+            if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                cur_arg_buf = String::new();
+            }
+            tokens.push(CommandLineToken::open_paren());
+        } else if c == ')' {
+            if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                cur_arg_buf = String::new();
+            }
+            tokens.push(CommandLineToken::close_paren());
+        } else {
             cur_arg_buf.push(c);
         }
     }
