@@ -349,6 +349,11 @@ fn execute_command(mut command: Vec<String>) -> i8 {
                 }
             }
         }
+        "!" => {
+            command.remove(0);
+            let return_code = execute_command(command);
+            if return_code != 0 { 0 } else { 1 }
+        }
         "exec" => {
             command.remove(0);
             run_command_line(command, false)
