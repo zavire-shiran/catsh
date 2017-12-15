@@ -1,8 +1,8 @@
 use std::env;
 use std::io;
 use std::io::{Write};
-use std::path::Path;
-use std::ffi::CString;
+use std::ffi::{CString};
+use std::path::{Path, PathBuf};
 
 extern crate nix;
 extern crate libc;
@@ -122,7 +122,7 @@ impl CommandParser {
         let mut command: Command = Command::always();
 
         let tokens = tokenize_command(line);
-        println!("{:?}", tokens);
+        //println!("{:?}", tokens);
         for token in tokens {
             if token.class == CommandLineTokenType::Argument {
                 command.push_argument(token.lexeme);
@@ -326,6 +326,27 @@ fn execute_command_list(command_list: CommandList) {
     }
 }
 
+fn standardize_path(path: &Path) -> PathBuf{
+    let mut standardized_path = PathBuf::new();
+    if path.is_relative() {
+        match env::var("PWD") {
+            Ok(pwd) => standardized_path = PathBuf::from(pwd),
+            Err(_) => standardized_path = PathBuf::from(env::current_dir().expect(""))
+        }
+    }
+
+    for component in path.iter() {
+        //println!("{:?}", component);
+        match component.to_str().expect("") {
+            "." => (),
+            ".." => { standardized_path.pop(); },
+            _ => standardized_path.push(component)
+        }
+    }
+
+    return standardized_path;
+}
+
 fn execute_command(mut command: Vec<String>) -> i8 {
     if command.len() == 0 {
         return 0;
@@ -333,8 +354,10 @@ fn execute_command(mut command: Vec<String>) -> i8 {
     match &command[0][..] {
         "cd" => {
             if command.len() > 1 {
-                env::set_current_dir(&command[1]).expect(""); // need to set command status on error here, so as not to panic
-                //println!("{:?}", env::current_dir());
+                let new_pwd =  standardize_path(Path::new(&command[1]));
+                env::set_current_dir(&new_pwd).expect(""); // need to set command status on error here, so as not to panic
+                env::set_var("PWD", &new_pwd);
+                //println!("{:?} {:?}", env::current_dir(), env::var("PWD"));
                 return 0;
             } else {
                 match env::var("HOME") {
