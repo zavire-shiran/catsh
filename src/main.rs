@@ -33,28 +33,28 @@ enum RunConditions {
 }
 
 #[derive(Debug)]
-struct Command {
+struct SimpleCommand {
     arguments: Vec<String>,
     run_conditions: RunConditions
 }
 
-impl Command {
-    fn always() -> Command {
-        return Command {
+impl SimpleCommand {
+    fn always() -> SimpleCommand {
+        return SimpleCommand {
             arguments: Vec::new(),
             run_conditions: RunConditions::Always
         }
     }
 
-    fn if_true() -> Command {
-        return Command {
+    fn if_true() -> SimpleCommand {
+        return SimpleCommand {
             arguments: Vec::new(),
             run_conditions: RunConditions::IfTrue
         }
     }
 
-    fn if_false() -> Command {
-        return Command {
+    fn if_false() -> SimpleCommand {
+        return SimpleCommand {
             arguments: Vec::new(),
             run_conditions: RunConditions::IfFalse
         }
@@ -69,7 +69,7 @@ impl Command {
     }
 }
 
-type CommandList = Vec<Command>;
+type CommandList = Vec<SimpleCommand>;
 
 struct CommandParser {
     input_buffer: String,
@@ -119,7 +119,7 @@ impl CommandParser {
 
     fn parse_command_list(&mut self, line: String) -> CommandList {
         let mut command_list: CommandList = Vec::new();
-        let mut command: Command = Command::always();
+        let mut command: SimpleCommand = SimpleCommand::always();
 
         let tokens = tokenize_command(line);
         //println!("{:?}", tokens);
@@ -130,16 +130,16 @@ impl CommandParser {
                 //this is a syntax error, but i don't want to deal with the Result<> right now
             } else if token.class == CommandLineTokenType::Semicolon {
                 command_list.push(command);
-                command = Command::always();
+                command = SimpleCommand::always();
             } else if token.class == CommandLineTokenType::EOL {
                 command_list.push(command);
                 return command_list;
             } else if token.class == CommandLineTokenType::AndOp {
                 command_list.push(command);
-                command = Command::if_true();
+                command = SimpleCommand::if_true();
             } else if token.class == CommandLineTokenType::OrOp {
                 command_list.push(command);
-                command = Command::if_false();
+                command = SimpleCommand::if_false();
             }
         }
 
