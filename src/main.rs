@@ -431,6 +431,15 @@ fn execute_command(mut command: Vec<String>) -> i8 {
                 }
             }
         }
+        "exit" => {
+            let status: i32;
+            if command.len() > 1 {
+                status = command[1].parse().unwrap();
+            } else {
+                status = 0; // should be the status of the last command, but thpbpbpbpt
+            }
+            std::process::exit(status);
+        }
         "!" => {
             command.remove(0);
             let return_code = execute_command(command);
