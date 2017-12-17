@@ -19,7 +19,7 @@ fn real_main() -> i32 {
         match command_parser.get_next_command_list() {
             Some(command_list) => execute_command_list(command_list),
             None => break
-        }
+        };
     }
 
     return 0;
@@ -69,10 +69,17 @@ impl SimpleCommand {
     }
 }
 
-type CommandList = Vec<SimpleCommand>;
+#[derive(Debug)]
+enum Command {
+    Simple(SimpleCommand),
+    Subshell(CommandList)
+}
+
+//type CommandList = Vec<SimpleCommand>;
+type CommandList = Vec<Command>;
 
 struct CommandParser {
-    input_buffer: String,
+    token_index: usize,
     command_list_buffer: Vec<CommandList>
 }
 
@@ -85,8 +92,9 @@ enum ParserStatus {
 impl CommandParser {
     fn new() -> CommandParser {
         return CommandParser{
-            input_buffer: std::string::String::new(),
-            command_list_buffer: Vec::new() }
+            token_index: 0,
+            command_list_buffer: Vec::new()
+        }
     }
 
     fn get_next_command_list(&mut self) -> Option<CommandList> {
@@ -118,34 +126,53 @@ impl CommandParser {
     }
 
     fn parse_command_list(&mut self, line: String) -> CommandList {
+        let tokens:Vec<CommandLineToken> = tokenize_command(line);
+        //println!("{:?}", tokens);
+
+        self.token_index = 0;
+        let command_list = self.parse_tokens(&tokens, false);
+        //println!("{:?}", command_list);
+        return command_list;
+    }
+
+    fn parse_tokens(&mut self, tokens: &Vec<CommandLineToken>, in_subshell: bool) -> CommandList {
         let mut command_list: CommandList = Vec::new();
         let mut command: SimpleCommand = SimpleCommand::always();
 
-        let tokens = tokenize_command(line);
-        //println!("{:?}", tokens);
-        for token in tokens {
+        while self.token_index < tokens.len() {
+            let token = &tokens[self.token_index];
             if token.class == CommandLineTokenType::Argument {
-                command.push_argument(token.lexeme);
-            } else if command.len() == 0 {
-                //this is a syntax error, but i don't want to deal with the Result<> right now
+                command.push_argument(token.lexeme.to_string());
             } else if token.class == CommandLineTokenType::Semicolon {
-                command_list.push(command);
+                command_list.push(Command::Simple(command));
                 command = SimpleCommand::always();
             } else if token.class == CommandLineTokenType::EOL {
-                command_list.push(command);
+                command_list.push(Command::Simple(command));
                 return command_list;
             } else if token.class == CommandLineTokenType::AndOp {
-                command_list.push(command);
+                command_list.push(Command::Simple(command));
                 command = SimpleCommand::if_true();
             } else if token.class == CommandLineTokenType::OrOp {
-                command_list.push(command);
+                command_list.push(Command::Simple(command));
                 command = SimpleCommand::if_false();
+            } else if token.class == CommandLineTokenType::OpenParen {
+                command_list.push(Command::Simple(command));
+                self.token_index += 1;
+                let subshell_command_list = self.parse_tokens(tokens, true);
+                //println!("subshell command {:?}", subshell_command_list);
+                command_list.push(Command::Subshell(subshell_command_list));
+                command = SimpleCommand::always();
+            } else if token.class == CommandLineTokenType::CloseParen {
+                command_list.push(Command::Simple(command));
+                self.token_index += 1;
+                return command_list;
             }
+
+            self.token_index += 1;
         }
 
         return command_list;
     }
-
 }
 
 #[derive(Debug, PartialEq)]
@@ -298,32 +325,64 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
     return tokens;
 }
 
-fn execute_command_list(command_list: CommandList) {
+fn execute_command_list(command_list: CommandList) -> i8 {
+    use nix::unistd::{fork, ForkResult};
+    use nix::sys::wait::WaitStatus;
+
     //println!("{:?}", command_list);
     let mut status = 0;
     for command in command_list {
         //println!("{:?}", command);
-        match command.run_conditions {
-            RunConditions::Always => {
-                //println!("Always");
-                status = execute_command(command.arguments)
-            },
-            RunConditions::IfTrue => {
-                //println!("IfTrue");
-                if status == 0 {
-                    status = execute_command(command.arguments)
+        match command {
+            Command::Simple(sc) => {
+                match sc.run_conditions {
+                    RunConditions::Always => {
+                        //println!("Always");
+                        status = execute_command(sc.arguments)
+                    },
+                    RunConditions::IfTrue => {
+                        //println!("IfTrue");
+                        if status == 0 {
+                            status = execute_command(sc.arguments)
+                        }
+                    },
+                    RunConditions::IfFalse => {
+                        //println!("IfFalse");
+                        if status != 0 {
+                            status = execute_command(sc.arguments)
+                        }
+                    }
                 }
-            },
-            RunConditions::IfFalse => {
-                //println!("IfFalse");
-                if status != 0 {
-                    status = execute_command(command.arguments)
+            }
+            Command::Subshell(cl) => {
+//              fork the process
+//              wait in parent on child
+//              in child, execute the command list, and exit with last executed status
+                match fork() {
+                    Ok(ForkResult::Parent {child, ..}) => {
+                        match nix::sys::wait::waitpid(child, None).expect("waitpid failed") {
+                            WaitStatus::Exited(_, s) => status = s,
+                            WaitStatus::Signaled(_, _, _) => status = -1,
+                            WaitStatus::Stopped(_, _) => status = -2,
+                            _ => status = -3
+                        };
+                    }
+                    Ok(ForkResult::Child) => {
+                        status = execute_command_list(cl);
+                        std::process::exit(status as i32);
+                    }
+                    Err(_) => {
+                        println!("fork failed");
+                        return 1;
+                    }
                 }
             }
         }
 
         //println!("command status: {}", status);
     }
+
+    return status;
 }
 
 fn standardize_path(path: &Path) -> PathBuf{
