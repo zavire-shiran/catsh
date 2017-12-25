@@ -144,27 +144,38 @@ impl CommandParser {
             if token.class == CommandLineTokenType::Argument {
                 command.push_argument(token.lexeme.to_string());
             } else if token.class == CommandLineTokenType::Semicolon {
-                command_list.push(Command::Simple(command));
+                if command.len() > 0 {
+                    command_list.push(Command::Simple(command));
+                }
                 command = SimpleCommand::always();
             } else if token.class == CommandLineTokenType::EOL {
-                command_list.push(Command::Simple(command));
+                if command.len() > 0 {
+                    command_list.push(Command::Simple(command));
+                }
                 return command_list;
             } else if token.class == CommandLineTokenType::AndOp {
-                command_list.push(Command::Simple(command));
+                if command.len() > 0 {
+                    command_list.push(Command::Simple(command));
+                }
                 command = SimpleCommand::if_true();
             } else if token.class == CommandLineTokenType::OrOp {
-                command_list.push(Command::Simple(command));
+                if command.len() > 0 {
+                    command_list.push(Command::Simple(command));
+                }
                 command = SimpleCommand::if_false();
             } else if token.class == CommandLineTokenType::OpenParen {
-                command_list.push(Command::Simple(command));
+                if command.len() > 0 {
+                    command_list.push(Command::Simple(command));
+                }
                 self.token_index += 1;
                 let subshell_command_list = self.parse_tokens(tokens, true);
                 //println!("subshell command {:?}", subshell_command_list);
                 command_list.push(Command::Subshell(subshell_command_list));
                 command = SimpleCommand::always();
             } else if token.class == CommandLineTokenType::CloseParen {
-                command_list.push(Command::Simple(command));
-                self.token_index += 1;
+                if command.len() > 0 {
+                    command_list.push(Command::Simple(command));
+                }
                 return command_list;
             }
 
