@@ -118,64 +118,49 @@ impl CommandParser {
         return match stdin.read_line(&mut input) {
             Ok(0) => ParserStatus::EOF, // this always mean EOF, i think
             _ => {
-                let command_list = self.parse_command_list(input);
+                let command_list = self.parse_command_line(input);
                 self.command_list_buffer.push(command_list);
                 ParserStatus::Ok
             }
         }
     }
 
-    fn parse_command_list(&mut self, line: String) -> CommandList {
+    fn parse_command_line(&mut self, line: String) -> CommandList {
         let tokens:Vec<CommandLineToken> = tokenize_command(line);
         //println!("{:?}", tokens);
 
         self.token_index = 0;
-        let command_list = self.parse_tokens(&tokens, false);
+        let command_list = self.parse_command_list(&tokens);
         //println!("{:?}", command_list);
         return command_list;
     }
 
-    fn parse_tokens(&mut self, tokens: &Vec<CommandLineToken>, in_subshell: bool) -> CommandList {
+    fn parse_command_list(&mut self, tokens: &Vec<CommandLineToken>) -> CommandList {
         let mut command_list: CommandList = Vec::new();
         let mut command: SimpleCommand = SimpleCommand::always();
 
         while self.token_index < tokens.len() {
             let token = &tokens[self.token_index];
             if token.class == CommandLineTokenType::Argument {
-                command.push_argument(token.lexeme.to_string());
+                self.parse_command(tokens, &mut command);
+                command_list.push(Command::Simple(command));
+                command = SimpleCommand::always();
+                continue;
             } else if token.class == CommandLineTokenType::Semicolon {
-                if command.len() > 0 {
-                    command_list.push(Command::Simple(command));
-                }
                 command = SimpleCommand::always();
             } else if token.class == CommandLineTokenType::EOL {
-                if command.len() > 0 {
-                    command_list.push(Command::Simple(command));
-                }
                 return command_list;
             } else if token.class == CommandLineTokenType::AndOp {
-                if command.len() > 0 {
-                    command_list.push(Command::Simple(command));
-                }
                 command = SimpleCommand::if_true();
             } else if token.class == CommandLineTokenType::OrOp {
-                if command.len() > 0 {
-                    command_list.push(Command::Simple(command));
-                }
                 command = SimpleCommand::if_false();
             } else if token.class == CommandLineTokenType::OpenParen {
-                if command.len() > 0 {
-                    command_list.push(Command::Simple(command));
-                }
                 self.token_index += 1;
-                let subshell_command_list = self.parse_tokens(tokens, true);
+                let subshell_command_list = self.parse_subshell(tokens);
                 //println!("subshell command {:?}", subshell_command_list);
                 command_list.push(Command::Subshell(subshell_command_list));
-                command = SimpleCommand::always();
             } else if token.class == CommandLineTokenType::CloseParen {
-                if command.len() > 0 {
-                    command_list.push(Command::Simple(command));
-                }
+                //parse error, but only if not in subshell
                 return command_list;
             }
 
@@ -183,6 +168,22 @@ impl CommandParser {
         }
 
         return command_list;
+    }
+
+    fn parse_subshell(&mut self, tokens: &Vec<CommandLineToken>) -> CommandList {
+        return self.parse_command_list(tokens);
+    }
+
+    fn parse_command(&mut self, tokens: &Vec<CommandLineToken>, command: &mut SimpleCommand) {
+        while self.token_index < tokens.len() {
+            let token = &tokens[self.token_index];
+            if token.class == CommandLineTokenType::Argument {
+                command.push_argument(token.lexeme.to_string());
+            } else {
+                return;
+            }
+            self.token_index += 1;
+        }
     }
 }
 
