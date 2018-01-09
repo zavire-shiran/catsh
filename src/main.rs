@@ -110,29 +110,44 @@ impl CommandParser {
     fn parse_input(&mut self) -> ParserStatus {
         let mut stdout = io::stdout();
         let stdin = io::stdin();
+        let mut tokens:Vec<CommandLineToken> = Vec::new();
 
-        stdout.write(b"$ ").is_ok();
-        stdout.flush().is_ok();
+        stdout.write(b"$ ").unwrap();
+        stdout.flush().unwrap();
 
-        let mut input = String::new();
-        return match stdin.read_line(&mut input) {
-            Ok(0) => ParserStatus::EOF, // this always mean EOF, i think
-            _ => {
-                let command_list = self.parse_command_line(input);
-                self.command_list_buffer.push(command_list);
-                ParserStatus::Ok
+        loop {
+            let mut input = String::new();
+            match stdin.read_line(&mut input) {
+                Ok(0) => {
+                    if tokens.len() > 0 {
+                        let command_list = self.parse_command_line(tokens);
+                    }
+                    return ParserStatus::EOF;
+                }
+                _ => {
+                    match tokenize_command(&input) {
+                        TokenizeStatus::Continuation(mut toks) => {
+                            tokens.append(&mut toks);
+                        }
+                        TokenizeStatus::Complete(mut toks) => {
+                            tokens.append(&mut toks);
+                            self.parse_command_line(tokens);
+                            return ParserStatus::Ok;
+                        }
+                    }
+                }
             }
+
+            stdout.write(b"> ").unwrap();
+            stdout.flush().unwrap();
         }
     }
 
-    fn parse_command_line(&mut self, line: String) -> CommandList {
-        let tokens:Vec<CommandLineToken> = tokenize_command(line);
-        //println!("{:?}", tokens);
-
+    fn parse_command_line(&mut self, tokens: Vec<CommandLineToken>) {
         self.token_index = 0;
         let command_list = self.parse_command_list(&tokens);
         //println!("{:?}", command_list);
-        return command_list;
+        self.command_list_buffer.push(command_list);
     }
 
     fn parse_command_list(&mut self, tokens: &Vec<CommandLineToken>) -> CommandList {
@@ -271,7 +286,12 @@ impl CommandLineToken {
     }
 }
 
-fn tokenize_command(line: String) -> Vec<CommandLineToken> {
+enum TokenizeStatus {
+    Complete(Vec<CommandLineToken>),
+    Continuation(Vec<CommandLineToken>)
+}
+
+fn tokenize_command<'a>(line: &'a String) -> TokenizeStatus {
     let mut cur_arg_buf = String::new();
     let mut tokens = Vec::new();
 
@@ -334,7 +354,7 @@ fn tokenize_command(line: String) -> Vec<CommandLineToken> {
         }
     }
 
-    return tokens;
+    return TokenizeStatus::Complete(tokens);
 }
 
 fn execute_command_list(command_list: CommandList) -> i8 {
