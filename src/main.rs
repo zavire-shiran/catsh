@@ -113,6 +113,7 @@ impl CommandParser {
         if tokens.len() == 0 {
             return ParserStatus::EOF;
         }
+        //println!("{:?}", tokens);
         self.parse_command_line(tokens);
         return ParserStatus::Ok;
     }
@@ -258,6 +259,13 @@ impl CommandLineToken {
             lexeme: String::from(")")
         }
     }
+
+    fn should_continue(self: &CommandLineToken) -> bool {
+        //println!("should continue {:?}", self.class);
+        return self.class == CommandLineTokenType::OrOp ||
+            self.class == CommandLineTokenType::AndOp ||
+            self.class == CommandLineTokenType::Pipe;
+    }
 }
 
 fn tokenize_command() -> Vec<CommandLineToken> {
@@ -271,10 +279,13 @@ fn tokenize_command() -> Vec<CommandLineToken> {
     stdout.flush().unwrap();
 
     loop {
+        line = String::new();
         let mut chars = match stdin.read_line(&mut line) {
             Ok(0) => return tokens,
             _ => line.chars()
         };
+
+        //println!("input: {}", line);
 
         loop {
             let c = match chars.next() {
@@ -323,9 +334,12 @@ fn tokenize_command() -> Vec<CommandLineToken> {
                     tokens.push(CommandLineToken::argument(cur_arg_buf));
                     cur_arg_buf = String::new();
                 }
+
                 if c == '\n' {
-                    tokens.push(CommandLineToken::eol());
-                    return tokens;
+                    if !tokens.last().unwrap().should_continue() {
+                        tokens.push(CommandLineToken::eol());
+                        return tokens;
+                    }
                 }
             } else if c == ';' {
                 if cur_arg_buf.len() > 0 {
