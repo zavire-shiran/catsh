@@ -282,6 +282,22 @@ fn tokenize_command() -> Vec<CommandLineToken> {
                 Some(ch) => ch
             };
 
+            if c == '\\' {
+                if cur_arg_buf == "&" {
+                    tokens.push(CommandLineToken::ampersand());
+                    cur_arg_buf = String::new();
+                } else if cur_arg_buf == "|" {
+                    tokens.push(CommandLineToken::pipe());
+                    cur_arg_buf = String::new();
+                }
+
+                let c = chars.next().unwrap();
+                if c != '\n' {
+                    cur_arg_buf.push(c);
+                }
+                continue
+            }
+
             if cur_arg_buf == "&" {
                 if c == '&' {
                     tokens.push(CommandLineToken::and_op());
@@ -301,7 +317,6 @@ fn tokenize_command() -> Vec<CommandLineToken> {
                     cur_arg_buf = String::new();
                 }
             }
-
 
             if c.is_whitespace() {
                 if cur_arg_buf.len() > 0 {
