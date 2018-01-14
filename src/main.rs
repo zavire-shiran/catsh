@@ -108,39 +108,13 @@ impl CommandParser {
     }
 
     fn parse_input(&mut self) -> ParserStatus {
-        let mut stdout = io::stdout();
-        let stdin = io::stdin();
         let mut tokens:Vec<CommandLineToken> = Vec::new();
-
-        stdout.write(b"$ ").unwrap();
-        stdout.flush().unwrap();
-
-        loop {
-            let mut input = String::new();
-            match stdin.read_line(&mut input) {
-                Ok(0) => {
-                    if tokens.len() > 0 {
-                        let command_list = self.parse_command_line(tokens);
-                    }
-                    return ParserStatus::EOF;
-                }
-                _ => {
-                    match tokenize_command(&input) {
-                        TokenizeStatus::Continuation(mut toks) => {
-                            tokens.append(&mut toks);
-                        }
-                        TokenizeStatus::Complete(mut toks) => {
-                            tokens.append(&mut toks);
-                            self.parse_command_line(tokens);
-                            return ParserStatus::Ok;
-                        }
-                    }
-                }
-            }
-
-            stdout.write(b"> ").unwrap();
-            stdout.flush().unwrap();
+        tokens = tokenize_command();
+        if tokens.len() == 0 {
+            return ParserStatus::EOF;
         }
+        self.parse_command_line(tokens);
+        return ParserStatus::Ok;
     }
 
     fn parse_command_line(&mut self, tokens: Vec<CommandLineToken>) {
@@ -286,75 +260,90 @@ impl CommandLineToken {
     }
 }
 
-enum TokenizeStatus {
-    Complete(Vec<CommandLineToken>),
-    Continuation(Vec<CommandLineToken>)
-}
-
-fn tokenize_command<'a>(line: &'a String) -> TokenizeStatus {
+fn tokenize_command() -> Vec<CommandLineToken> {
+    let mut stdout = io::stdout();
+    let stdin = io::stdin();
     let mut cur_arg_buf = String::new();
     let mut tokens = Vec::new();
+    let mut line: std::string::String = String::new();
 
-    for c in line.chars() {
-        if cur_arg_buf == "&" {
-            if c == '&' {
-                tokens.push(CommandLineToken::and_op());
-                cur_arg_buf = String::new();
-                continue;
-            } else {
-                tokens.push(CommandLineToken::ampersand());
-                cur_arg_buf = String::new();
+    stdout.write(b"$ ").unwrap();
+    stdout.flush().unwrap();
+
+    loop {
+        let mut chars = match stdin.read_line(&mut line) {
+            Ok(0) => return tokens,
+            _ => line.chars()
+        };
+
+        loop {
+            let c = match chars.next() {
+                None => break,
+                Some(ch) => ch
+            };
+
+            if cur_arg_buf == "&" {
+                if c == '&' {
+                    tokens.push(CommandLineToken::and_op());
+                    cur_arg_buf = String::new();
+                    continue;
+                } else {
+                    tokens.push(CommandLineToken::ampersand());
+                    cur_arg_buf = String::new();
+                }
+            } else if cur_arg_buf == "|" {
+                if c == '|' {
+                    tokens.push(CommandLineToken::or_op());
+                    cur_arg_buf = String::new();
+                    continue;
+                } else {
+                    tokens.push(CommandLineToken::pipe());
+                    cur_arg_buf = String::new();
+                }
             }
-        } else if cur_arg_buf == "|" {
-            if c == '|' {
-                tokens.push(CommandLineToken::or_op());
-                cur_arg_buf = String::new();
-                continue;
+
+
+            if c.is_whitespace() {
+                if cur_arg_buf.len() > 0 {
+                    tokens.push(CommandLineToken::argument(cur_arg_buf));
+                    cur_arg_buf = String::new();
+                }
+                if c == '\n' {
+                    tokens.push(CommandLineToken::eol());
+                    return tokens;
+                }
+            } else if c == ';' {
+                if cur_arg_buf.len() > 0 {
+                    tokens.push(CommandLineToken::argument(cur_arg_buf));
+                    cur_arg_buf = String::new();
+                }
+                tokens.push(CommandLineToken::semicolon());
+            } else if c == '&' || c == '|' {
+                if cur_arg_buf.len() > 0 {
+                    tokens.push(CommandLineToken::argument(cur_arg_buf));
+                    cur_arg_buf = String::new();
+                }
+                cur_arg_buf.push(c);
+            } else if c == '(' {
+                if cur_arg_buf.len() > 0 {
+                    tokens.push(CommandLineToken::argument(cur_arg_buf));
+                    cur_arg_buf = String::new();
+                }
+                tokens.push(CommandLineToken::open_paren());
+            } else if c == ')' {
+                if cur_arg_buf.len() > 0 {
+                tokens.push(CommandLineToken::argument(cur_arg_buf));
+                    cur_arg_buf = String::new();
+                }
+                tokens.push(CommandLineToken::close_paren());
             } else {
-                tokens.push(CommandLineToken::pipe());
-                cur_arg_buf = String::new();
+                cur_arg_buf.push(c);
             }
         }
 
-
-        if c.is_whitespace() {
-            if cur_arg_buf.len() > 0 {
-                tokens.push(CommandLineToken::argument(cur_arg_buf));
-                cur_arg_buf = String::new();
-            }
-            if c == '\n' {
-                tokens.push(CommandLineToken::eol())
-            }
-        } else if c == ';' {
-            if cur_arg_buf.len() > 0 {
-                tokens.push(CommandLineToken::argument(cur_arg_buf));
-                cur_arg_buf = String::new();
-            }
-            tokens.push(CommandLineToken::semicolon());
-        } else if c == '&' || c == '|' {
-            if cur_arg_buf.len() > 0 {
-                tokens.push(CommandLineToken::argument(cur_arg_buf));
-                cur_arg_buf = String::new();
-            }
-            cur_arg_buf.push(c);
-        } else if c == '(' {
-            if cur_arg_buf.len() > 0 {
-                tokens.push(CommandLineToken::argument(cur_arg_buf));
-                cur_arg_buf = String::new();
-            }
-            tokens.push(CommandLineToken::open_paren());
-        } else if c == ')' {
-            if cur_arg_buf.len() > 0 {
-                tokens.push(CommandLineToken::argument(cur_arg_buf));
-                cur_arg_buf = String::new();
-            }
-            tokens.push(CommandLineToken::close_paren());
-        } else {
-            cur_arg_buf.push(c);
-        }
+        stdout.write(b"> ").unwrap();
+        stdout.flush().unwrap();
     }
-
-    return TokenizeStatus::Complete(tokens);
 }
 
 fn execute_command_list(command_list: CommandList) -> i8 {
