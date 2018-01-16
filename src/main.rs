@@ -33,54 +33,72 @@ enum RunConditions {
 }
 
 #[derive(Debug)]
-struct SimpleCommand {
-    arguments: Vec<String>,
-    run_conditions: RunConditions
+struct Command {
+    arguments: Vec<String>
 }
 
-impl SimpleCommand {
-    fn always() -> SimpleCommand {
-        return SimpleCommand {
-            arguments: Vec::new(),
-            run_conditions: RunConditions::Always
+impl Command {
+    fn new() -> Command {
+        return Command {
+            arguments: Vec::new()
         }
     }
 
-    fn if_true() -> SimpleCommand {
-        return SimpleCommand {
-            arguments: Vec::new(),
-            run_conditions: RunConditions::IfTrue
-        }
-    }
-
-    fn if_false() -> SimpleCommand {
-        return SimpleCommand {
-            arguments: Vec::new(),
-            run_conditions: RunConditions::IfFalse
-        }
-    }
-
-    fn push_argument(&mut self, arg: String) {
-        self.arguments.push(arg);
-    }
-
-    fn len(&self) -> usize {
-        return self.arguments.len();
+    fn push_argument(&mut self, argument: String) {
+        self.arguments.push(argument);
     }
 }
 
 #[derive(Debug)]
-enum Command {
-    Simple(SimpleCommand),
+struct Pipeline {
+    commands: Vec<Command>,
+    run_conditions: RunConditions
+}
+
+impl Pipeline {
+    fn always() -> Pipeline {
+        return Pipeline {
+            commands: Vec::new(),
+            run_conditions: RunConditions::Always
+        }
+    }
+
+    fn if_true() -> Pipeline {
+        return Pipeline {
+            commands: Vec::new(),
+            run_conditions: RunConditions::IfTrue
+        }
+    }
+
+    fn if_false() -> Pipeline {
+        return Pipeline {
+            commands: Vec::new(),
+            run_conditions: RunConditions::IfFalse
+        }
+    }
+
+    fn push_command(&mut self, command: Command) {
+        self.commands.push(command);
+    }
+
+    fn len(&self) -> usize {
+        return self.commands.len();
+    }
+}
+
+#[derive(Debug)]
+enum CommandListItem {
+    Pipeline(Pipeline),
     Subshell(CommandList)
 }
 
 //type CommandList = Vec<SimpleCommand>;
-type CommandList = Vec<Command>;
+type CommandList = Vec<CommandListItem>;
 
 struct CommandParser {
     token_index: usize,
-    command_list_buffer: Vec<CommandList>
+    command_list_buffer: Vec<CommandList>,
+    tokens: Vec<CommandLineToken>
 }
 
 #[derive(PartialEq)]
@@ -93,7 +111,8 @@ impl CommandParser {
     fn new() -> CommandParser {
         return CommandParser{
             token_index: 0,
-            command_list_buffer: Vec::new()
+            command_list_buffer: Vec::new(),
+            tokens: Vec::new()
         }
     }
 
@@ -120,36 +139,38 @@ impl CommandParser {
 
     fn parse_command_line(&mut self, tokens: Vec<CommandLineToken>) {
         self.token_index = 0;
-        let command_list = self.parse_command_list(&tokens);
+        self.tokens = tokens;
+        let command_list = self.parse_command_list();
         //println!("{:?}", command_list);
         self.command_list_buffer.push(command_list);
     }
 
-    fn parse_command_list(&mut self, tokens: &Vec<CommandLineToken>) -> CommandList {
+    fn parse_command_list(&mut self) -> CommandList {
         let mut command_list: CommandList = Vec::new();
-        let mut command: SimpleCommand = SimpleCommand::always();
+        let mut pipeline: Pipeline = Pipeline::always();
 
-        while self.token_index < tokens.len() {
-            let token = &tokens[self.token_index];
-            if token.class == CommandLineTokenType::Argument {
-                self.parse_command(tokens, &mut command);
-                command_list.push(Command::Simple(command));
-                command = SimpleCommand::always();
+        while self.token_index < self.tokens.len() {
+            let tokenclass = self.tokens[self.token_index].class.clone();
+
+            if tokenclass == CommandLineTokenType::Argument {
+                self.parse_pipeline(&mut pipeline);
+                command_list.push(CommandListItem::Pipeline(pipeline));
+                pipeline = Pipeline::always();
                 continue;
-            } else if token.class == CommandLineTokenType::Semicolon {
-                command = SimpleCommand::always();
-            } else if token.class == CommandLineTokenType::EOL {
+            } else if tokenclass == CommandLineTokenType::Semicolon {
+                pipeline = Pipeline::always();
+            } else if tokenclass == CommandLineTokenType::EOL {
                 return command_list;
-            } else if token.class == CommandLineTokenType::AndOp {
-                command = SimpleCommand::if_true();
-            } else if token.class == CommandLineTokenType::OrOp {
-                command = SimpleCommand::if_false();
-            } else if token.class == CommandLineTokenType::OpenParen {
+            } else if tokenclass == CommandLineTokenType::AndOp {
+                pipeline = Pipeline::if_true();
+            } else if tokenclass == CommandLineTokenType::OrOp {
+                pipeline = Pipeline::if_false();
+            } else if tokenclass == CommandLineTokenType::OpenParen {
                 self.token_index += 1;
-                let subshell_command_list = self.parse_subshell(tokens);
+                let subshell_command_list = self.parse_subshell();
                 //println!("subshell command {:?}", subshell_command_list);
-                command_list.push(Command::Subshell(subshell_command_list));
-            } else if token.class == CommandLineTokenType::CloseParen {
+                command_list.push(CommandListItem::Subshell(subshell_command_list));
+            } else if tokenclass == CommandLineTokenType::CloseParen {
                 //parse error, but only if not in subshell
                 return command_list;
             }
@@ -160,24 +181,36 @@ impl CommandParser {
         return command_list;
     }
 
-    fn parse_subshell(&mut self, tokens: &Vec<CommandLineToken>) -> CommandList {
-        return self.parse_command_list(tokens);
+    fn parse_subshell(&mut self) -> CommandList {
+        return self.parse_command_list();
     }
 
-    fn parse_command(&mut self, tokens: &Vec<CommandLineToken>, command: &mut SimpleCommand) {
-        while self.token_index < tokens.len() {
-            let token = &tokens[self.token_index];
-            if token.class == CommandLineTokenType::Argument {
-                command.push_argument(token.lexeme.to_string());
-            } else {
-                return;
+    fn parse_pipeline(&mut self, pipeline: &mut Pipeline) {
+        while self.token_index < self.tokens.len() {
+            let tokenclass = self.tokens[self.token_index].class.clone();
+            if tokenclass == CommandLineTokenType::Argument {
+                pipeline.push_command(self.parse_command());
             }
             self.token_index += 1;
         }
     }
+
+    fn parse_command(&mut self) -> Command {
+        let mut command = Command::new();
+        while self.token_index < self.tokens.len() {
+            let token = &self.tokens[self.token_index];
+            if token.class == CommandLineTokenType::Argument {
+                command.push_argument(token.lexeme.to_string());
+            } else {
+                return command;
+            }
+            self.token_index += 1;
+        }
+        return command
+    }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum CommandLineTokenType {
     Argument,
     EOL,
@@ -384,30 +417,27 @@ fn execute_command_list(command_list: CommandList) -> i8 {
     for command in command_list {
         //println!("{:?}", command);
         match command {
-            Command::Simple(sc) => {
-                match sc.run_conditions {
+            CommandListItem::Pipeline(pipeline) => {
+                match pipeline.run_conditions {
                     RunConditions::Always => {
                         //println!("Always");
-                        status = execute_command(sc.arguments)
+                        status = execute_pipeline(pipeline.commands)
                     },
                     RunConditions::IfTrue => {
                         //println!("IfTrue");
                         if status == 0 {
-                            status = execute_command(sc.arguments)
+                            status = execute_pipeline(pipeline.commands)
                         }
                     },
                     RunConditions::IfFalse => {
                         //println!("IfFalse");
                         if status != 0 {
-                            status = execute_command(sc.arguments)
+                            status = execute_pipeline(pipeline.commands)
                         }
                     }
                 }
             }
-            Command::Subshell(cl) => {
-//              fork the process
-//              wait in parent on child
-//              in child, execute the command list, and exit with last executed status
+            CommandListItem::Subshell(cl) => {
                 match fork() {
                     Ok(ForkResult::Parent {child, ..}) => {
                         match nix::sys::wait::waitpid(child, None).expect("waitpid failed") {
@@ -454,6 +484,10 @@ fn standardize_path(path: &Path) -> PathBuf{
     }
 
     return standardized_path;
+}
+
+fn execute_pipeline(commands: Vec<Command>) -> i8 {
+    return 0;
 }
 
 fn execute_command(mut command: Vec<String>) -> i8 {
