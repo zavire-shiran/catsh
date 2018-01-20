@@ -17,7 +17,7 @@ fn real_main() -> i32 {
 
     loop {
         match command_parser.get_next_command_list() {
-            Some(command_list) => execute_command_list(command_list),
+            Some(mut command_list) => execute_command_list(&mut command_list),
             None => break
         };
     }
@@ -127,7 +127,7 @@ impl CommandParser {
     }
 
     fn parse_input(&mut self) -> ParserStatus {
-        let mut tokens:Vec<CommandLineToken> = Vec::new();
+        let tokens:Vec<CommandLineToken>;
         tokens = tokenize_command();
         if tokens.len() == 0 {
             return ParserStatus::EOF;
@@ -141,7 +141,6 @@ impl CommandParser {
         self.token_index = 0;
         self.tokens = tokens;
         let command_list = self.parse_command_list();
-        //println!("{:?}", command_list);
         self.command_list_buffer.push(command_list);
     }
 
@@ -168,7 +167,6 @@ impl CommandParser {
             } else if tokenclass == CommandLineTokenType::OpenParen {
                 self.token_index += 1;
                 let subshell_command_list = self.parse_subshell();
-                //println!("subshell command {:?}", subshell_command_list);
                 command_list.push(CommandListItem::Subshell(subshell_command_list));
             } else if tokenclass == CommandLineTokenType::CloseParen {
                 //parse error, but only if not in subshell
@@ -190,8 +188,9 @@ impl CommandParser {
             let tokenclass = self.tokens[self.token_index].class.clone();
             if tokenclass == CommandLineTokenType::Argument {
                 pipeline.push_command(self.parse_command());
+            } else if tokenclass != CommandLineTokenType::Pipe {
+                return;
             }
-            self.token_index += 1;
         }
     }
 
@@ -306,7 +305,7 @@ fn tokenize_command() -> Vec<CommandLineToken> {
     let stdin = io::stdin();
     let mut cur_arg_buf = String::new();
     let mut tokens = Vec::new();
-    let mut line: std::string::String = String::new();
+    let mut line: std::string::String;
 
     stdout.write(b"$ ").unwrap();
     stdout.flush().unwrap();
@@ -408,7 +407,7 @@ fn tokenize_command() -> Vec<CommandLineToken> {
     }
 }
 
-fn execute_command_list(command_list: CommandList) -> i8 {
+fn execute_command_list(command_list: &mut CommandList) -> i8 {
     use nix::unistd::{fork, ForkResult};
     use nix::sys::wait::WaitStatus;
 
@@ -416,28 +415,28 @@ fn execute_command_list(command_list: CommandList) -> i8 {
     let mut status = 0;
     for command in command_list {
         //println!("{:?}", command);
-        match command {
-            CommandListItem::Pipeline(pipeline) => {
+        match *command {
+            CommandListItem::Pipeline(ref mut pipeline) => {
                 match pipeline.run_conditions {
                     RunConditions::Always => {
                         //println!("Always");
-                        status = execute_pipeline(pipeline.commands)
+                        status = execute_pipeline(&mut pipeline.commands)
                     },
                     RunConditions::IfTrue => {
                         //println!("IfTrue");
                         if status == 0 {
-                            status = execute_pipeline(pipeline.commands)
+                            status = execute_pipeline(&mut pipeline.commands)
                         }
                     },
                     RunConditions::IfFalse => {
                         //println!("IfFalse");
                         if status != 0 {
-                            status = execute_pipeline(pipeline.commands)
+                            status = execute_pipeline(&mut pipeline.commands)
                         }
                     }
                 }
             }
-            CommandListItem::Subshell(cl) => {
+            CommandListItem::Subshell(ref mut cl) => {
                 match fork() {
                     Ok(ForkResult::Parent {child, ..}) => {
                         match nix::sys::wait::waitpid(child, None).expect("waitpid failed") {
@@ -486,11 +485,16 @@ fn standardize_path(path: &Path) -> PathBuf{
     return standardized_path;
 }
 
-fn execute_pipeline(commands: Vec<Command>) -> i8 {
-    return 0;
+fn execute_pipeline(commands: &mut Vec<Command>) -> i8 {
+    if commands.len() == 1 {
+        return execute_command(&mut commands[0].arguments);
+    } else {
+        println!("{:?}", commands);
+        panic!("don't know what to do with pipelines!");
+    }
 }
 
-fn execute_command(mut command: Vec<String>) -> i8 {
+fn execute_command(command: &mut Vec<String>) -> i8 {
     if command.len() == 0 {
         return 0;
     }
@@ -537,7 +541,7 @@ fn execute_command(mut command: Vec<String>) -> i8 {
     }
 }
 
-fn run_command_line(command: Vec<String>, fork: bool) -> i8 {
+fn run_command_line(command: &Vec<String>, fork: bool) -> i8 {
     let command_name = &command[0];
     let command_args: Vec<CString> = command.iter().map(|ref s| CString::new(s.as_bytes()).unwrap()).collect();
 
