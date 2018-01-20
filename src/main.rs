@@ -155,7 +155,6 @@ impl CommandParser {
                 self.parse_pipeline(&mut pipeline);
                 command_list.push(CommandListItem::Pipeline(pipeline));
                 pipeline = Pipeline::always();
-                continue;
             } else if tokenclass == CommandLineTokenType::Semicolon {
                 pipeline = Pipeline::always();
             } else if tokenclass == CommandLineTokenType::EOL {
@@ -188,9 +187,12 @@ impl CommandParser {
             let tokenclass = self.tokens[self.token_index].class.clone();
             if tokenclass == CommandLineTokenType::Argument {
                 pipeline.push_command(self.parse_command());
+                continue;
             } else if tokenclass != CommandLineTokenType::Pipe {
                 return;
             }
+
+            self.token_index += 1;
         }
     }
 
@@ -486,11 +488,13 @@ fn standardize_path(path: &Path) -> PathBuf{
 }
 
 fn execute_pipeline(commands: &mut Vec<Command>) -> i8 {
+    println!("executing pipeline");
     if commands.len() == 1 {
         return execute_command(&mut commands[0].arguments);
     } else {
         println!("{:?}", commands);
-        panic!("don't know what to do with pipelines!");
+        println!("don't know what to do with pipelines!");
+        return 1;
     }
 }
 
